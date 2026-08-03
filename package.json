@@ -1,0 +1,17 @@
+{
+  "name": "selfapi",
+  "version": "1.0.0",
+  "description": "Self-hosted AI aggregation proxy with multi-platform rotation",
+  "main": "server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2"
+  }
+}

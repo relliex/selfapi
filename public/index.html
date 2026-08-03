@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SelfApi · AI 聚合控制台</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --border: #2a2f3a;
+    --text: #e6e9ef; --muted: #8a93a3; --accent: #4f8cff; --accent2: #36d399;
+    --danger: #f87171; --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; padding: 12px 20px;
+    background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .badge { font-size: 11px; color: var(--accent2); background: rgba(54,211,153,.12); padding: 2px 8px; border-radius: 4px; }
+  nav { display: flex; gap: 4px; margin-left: auto; }
+  nav button {
+    background: transparent; border: 1px solid transparent; color: var(--muted);
+    padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  }
+  nav button:hover { color: var(--text); background: var(--panel2); }
+  nav button.active { color: var(--text); background: var(--panel2); border-color: var(--border); }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 14px; font-size: 15px; font-weight: 600; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input, select, textarea {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; font-size: 13px; font-family: inherit; outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  input.flex, textarea.flex { flex: 1; min-width: 120px; }
+  button.btn {
+    background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 6px;
+    cursor: pointer; font-size: 13px; font-weight: 500;
+  }
+  button.btn:hover { filter: brightness(1.1); }
+  button.btn.ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+  button.btn.danger { background: var(--danger); }
+  button.btn.sm { padding: 5px 10px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.mono, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+  .pill.ok { background: rgba(54,211,153,.15); color: var(--accent2); }
+  .pill.off { background: rgba(138,147,163,.15); color: var(--muted); }
+  .pill.err { background: rgba(248,113,113,.15); color: var(--danger); }
+  .muted { color: var(--muted); }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .stat { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .stat .label { color: var(--muted); font-size: 12px; }
+  .stat .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel2); border: 1px solid var(--border);
+    padding: 10px 16px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.4); z-index: 100; font-size: 13px; }
+  .toast.err { border-color: var(--danger); }
+  .model-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .model-list span { background: var(--panel2); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; font-size: 11px; font-family: ui-monospace, monospace; }
+  .login-wrap { max-width: 360px; margin: 80px auto; }
+  details summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+  pre { background: var(--panel2); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+  .hidden { display: none !important; }
+  code { background: var(--panel2); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  a { color: var(--accent); }
+  .topo { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .topo strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div id="login" class="login-wrap">
+  <div class="card">
+    <h2>SelfApi 管理员登录</h2>
+    <div class="row">
+      <input id="pw" type="password" placeholder="管理员密码" class="flex">
+      <button class="btn" onclick="doLogin()">登录</button>
+    </div>
+    <p class="muted" style="margin:14px 0 0;font-size:12px">密码即服务端 <code>ADMIN_PASSWORD</code> 环境变量。回车也可登录。</p>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>SelfApi</h1>
+    <span class="badge">AI 聚合</span>
+    <nav>
+      <button data-tab="dash" class="active" onclick="tab('dash')">概览</button>
+      <button data-tab="up" onclick="tab('up')">上游平台</button>
+      <button data-tab="models" onclick="tab('models')">模型</button>
+      <button data-tab="keys" onclick="tab('keys')">下游密钥</button>
+      <button data-tab="logs" onclick="tab('logs')">日志</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 概览 -->
+    <section id="t-dash">
+      <div class="card">
+        <h2>使用方式</h2>
+        <p class="topo">1. 在「上游平台」填入每个 AI 平台的 <strong>Base URL</strong> 和 <strong>API Key</strong>，系统会自动拉取模型列表。</p>
+        <p class="topo">2. 在「下游密钥」生成一个 <strong>sk-selfapi-xxx</strong> 密钥，供你的客户端使用。</p>
+        <p class="topo">3. 客户端以 <strong>OpenAI 格式</strong> 调用下方 endpoint，同名模型会自动在多个上游间轮换，单平台失败立即切换。</p>
+        <pre id="usageBox"></pre>
+      </div>
+      <div class="card">
+        <h2>请求统计</h2>
+        <div id="statsBox" class="stat-grid"></div>
+      </div>
+    </section>
+
+    <!-- 上游 -->
+    <section id="t-up" class="hidden">
+      <div class="card">
+        <h2>添加上游平台</h2>
+        <div class="row">
+          <input id="up_name" placeholder="名称（如 openrouter）">
+          <input id="up_url" placeholder="Base URL（如 https://openrouter.ai/api/v1）" class="flex">
+          <input id="up_key" placeholder="API Key" class="flex">
+          <button class="btn" onclick="addUpstream()">添加并拉取模型</button>
+        </div>
+        <p class="muted" style="font-size:12px;margin-top:8px">支持自动识别 <code>/v1</code> 后缀；模型通过 <code>GET /v1/models</code> 拉取。</p>
+      </div>
+      <div class="card">
+        <h2>已配置上游</h2>
+        <table>
+          <thead><tr><th>名称</th><th>Base URL</th><th>状态</th><th>模型数</th><th>操作</th></tr></thead>
+          <tbody id="upBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 模型 -->
+    <section id="t-models" class="hidden">
+      <div class="card">
+        <h2>模型 → 上游映射</h2>
+        <p class="muted" style="font-size:12px;margin:0 0 10px">同名模型在多个上游间轮换（round-robin），单平台报错立即切换下一个，下游无感知。</p>
+        <table>
+          <thead><tr><th>模型 ID</th><th>可用上游</th></tr></thead>
+          <tbody id="modelBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 密钥 -->
+    <section id="t-keys" class="hidden">
+      <div class="card">
+        <h2>生成下游 API Key</h2>
+        <div class="row">
+          <input id="key_name" placeholder="备注名（如 my-app）" class="flex">
+          <button class="btn" onclick="addKey()">生成</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>下游密钥</h2>
+        <table>
+          <thead><tr><th>Key</th><th>备注</th><th>状态</th><th>创建</th><th>操作</th></tr></thead>
+          <tbody id="keyBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 日志 -->
+    <section id="t-logs" class="hidden">
+      <div class="card">
+        <h2>请求日志 <button class="btn ghost sm" style="float:right" onclick="loadLogs()">刷新</button></h2>
+        <table>
+          <thead><tr><th>时间</th><th>密钥</th><th>模型</th><th>上游</th><th>状态</th><th>耗时</th><th>Tokens</th><th>错误</th></tr></thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+let TOKEN = localStorage.getItem('selfapi_token') || '';
+const api = (path, opts = {}) => fetch(path, {
+  ...opts,
+  headers: { 'Content-Type': 'application/json', ...(TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {}), ...(opts.headers || {}) }
+}).then(async r => {
+  if (r.status === 401) { localStorage.removeItem('selfapi_token'); TOKEN=''; showLogin(); throw new Error('未授权'); }
+  const txt = await r.text();
+  let data; try { data = txt ? JSON.parse(txt) : {}; } catch { data = { raw: txt }; }
+  if (!r.ok) throw new Error(data.error?.message || data.raw || ('HTTP ' + r.status));
+  return data;
+});
+
+function toast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast' + (isErr ? ' err' : '');
+  setTimeout(() => t.classList.add('hidden'), 2600);
+}
+function showLogin() { document.getElementById('app').classList.add('hidden'); document.getElementById('login').classList.remove('hidden'); }
+function showApp() { document.getElementById('login').classList.add('hidden'); document.getElementById('app').classList.remove('hidden'); }
+
+document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+async function doLogin() {
+  const pw = document.getElementById('pw').value;
+  if (!pw) return;
+  try {
+    const r = await fetch('/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
+    if (!r.ok) throw new Error('密码错误');
+    const data = await r.json();
+    TOKEN = data.token; localStorage.setItem('selfapi_token', TOKEN);
+    showApp(); loadDash(); loadUpstreams();
+  } catch (e) { toast(e.message, true); }
+}
+function logout() { localStorage.removeItem('selfapi_token'); TOKEN=''; showLogin(); }
+
+function tab(name) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  ['dash','up','models','keys','logs'].forEach(t => document.getElementById('t-'+t).classList.toggle('hidden', t !== name));
+  if (name === 'up') loadUpstreams();
+  if (name === 'models') loadModels();
+  if (name === 'keys') loadKeys();
+  if (name === 'logs') loadLogs();
+  if (name === 'dash') loadDash();
+}
+
+// ---- dash ----
+async function loadDash() {
+  try {
+    const [info, stats] = await Promise.all([api('/admin/info'), api('/admin/stats')]);
+    const base = info.openai_endpoint || (location.origin + '/v1');
+    document.getElementById('usageBox').textContent =
+`# OpenAI 兼容 endpoint
+Base URL:  ${base}
+API Key:   sk-selfapi-xxxxx   (在「下游密钥」生成)
+
+# Python (openai SDK)
+from openai import OpenAI
+client = OpenAI(base_url="${base}", api_key="sk-selfapi-xxxxx")
+resp = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user","content":"hi"}])
+
+# curl
+curl ${base}/chat/completions \\
+  -H "Authorization: Bearer sk-selfapi-xxxxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}'`;
+    const s = stats || {};
+    document.getElementById('statsBox').innerHTML = [
+      ['总请求', s.total || 0],
+      ['成功', s.success || 0],
+      ['失败', s.errors || 0],
+      ['Prompt tokens', s.prompt_tokens || 0],
+      ['Completion tokens', s.completion_tokens || 0],
+    ].map(([l,v]) => `<div class="stat"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---- upstreams ----
+async function loadUpstreams() {
+  try {
+    const list = await api('/admin/upstreams');
+    document.getElementById('upBody').innerHTML = list.map(u => `
+      <tr>
+        <td><strong>${esc(u.name)}</strong></td>
+        <td class="mono">${esc(u.base_url)}${u.fetch_error?`<br><span class="pill err" title="${esc(u.fetch_error)}">拉取失败</span>`:''}</td>
+        <td><span class="pill ${u.enabled?'ok':'off'}">${u.enabled?'启用':'停用'}</span></td>
+        <td>${(u.models||[]).length}</td>
+        <td>
+          <button class="btn ghost sm" onclick="refreshUp(${u.id})">刷新模型</button>
+          <button class="btn ghost sm" onclick="toggleUp(${u.id},${u.enabled?0:1})">${u.enabled?'停用':'启用'}</button>
+          <button class="btn danger sm" onclick="delUp(${u.id})">删除</button>
+        </td>
+      </tr>
+      <tr><td colspan="5"><details><summary>查看 ${(u.models||[]).length} 个模型</summary><div class="model-list">${(u.models||[]).map(m=>`<span>${esc(m)}</span>`).join('')}</div></details></td></tr>
+    `).join('') || '<tr><td colspan="5" class="muted">尚未添加上游</td></tr>';
+  } catch (e) { toast(e.message, true); }
+}
+async function addUpstream() {
+  const name = document.getElementById('up_name').value.trim();
+  const base_url = document.getElementById('up_url').value.trim();
+  const api_key = document.getElementById('up_key').value.trim();
+  if (!name || !base_url || !api_key) return toast('请填写完整', true);
+  try {
+    const r = await api('/admin/upstreams', { method: 'POST', body: JSON.stringify({ name, base_url, api_key }) });
+    toast(r.fetch_error ? `已添加，但模型拉取失败: ${r.fetch_error}` : `已添加，拉取到 ${(r.models||[]).length} 个模型`, !!r.fetch_error);
+    document.getElementById('up_name').value = document.getElementById('up_url').value = document.getElementById('up_key').value = '';
+    loadUpstreams();
+  } catch (e) { toast(e.message, true); }
+}
+async function refreshUp(id) { try { const r = await api(`/admin/upstreams/${id}/refresh`, { method: 'POST' }); toast(`已更新 ${r.models.length} 个模型`); loadUpstreams(); } catch (e) { toast(e.message, true); } }
+async function toggleUp(id, en) { try { await api(`/admin/upstreams/${id}`, { method: 'PUT', body: JSON.stringify({ enabled: !!en }) }); loadUpstreams(); } catch (e) { toast(e.message, true); } }
+async function delUp(id) { if (!confirm('删除该上游及其模型映射？')) return; try { await api(`/admin/upstreams/${id}`, { method: 'DELETE' }); loadUpstreams(); } catch (e) { toast(e.message, true); } }
+
+// ---- models ----
+async function loadModels() {
+  try {
+    const list = await api('/admin/models');
+    document.getElementById('modelBody').innerHTML = list.map(m => `
+      <tr><td class="mono">${esc(m.model)}</td><td>${m.upstreams.map(u=>`<span class="pill ok">${esc(u.upstream_name)}</span>`).join(' ')}</td></tr>
+    `).join('') || '<tr><td colspan="2" class="muted">无模型</td></tr>';
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---- keys ----
+async function loadKeys() {
+  try {
+    const list = await api('/admin/keys');
+    document.getElementById('keyBody').innerHTML = list.map(k => `
+      <tr>
+        <td class="mono">${esc(k.key)}</td>
+        <td>${esc(k.name||'')}</td>
+        <td><span class="pill ${k.enabled?'ok':'off'}">${k.enabled?'启用':'停用'}</span></td>
+        <td class="muted">${esc(k.created_at)}</td>
+        <td>
+          <button class="btn ghost sm" onclick="copyKey('${esc(k.key)}')">复制</button>
+          <button class="btn ghost sm" onclick="toggleKey(${k.id})">${k.enabled?'停用':'启用'}</button>
+          <button class="btn danger sm" onclick="delKey(${k.id})">删除</button>
+        </td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" class="muted">尚未生成密钥</td></tr>';
+  } catch (e) { toast(e.message, true); }
+}
+async function addKey() {
+  const name = document.getElementById('key_name').value.trim();
+  try { const r = await api('/admin/keys', { method: 'POST', body: JSON.stringify({ name }) }); toast('已生成: ' + r.key); document.getElementById('key_name').value=''; loadKeys(); } catch (e) { toast(e.message, true); }
+}
+async function toggleKey(id) { try { await api(`/admin/keys/${id}/toggle`, { method: 'POST' }); loadKeys(); } catch (e) { toast(e.message, true); } }
+async function delKey(id) { if (!confirm('删除该密钥？')) return; try { await api(`/admin/keys/${id}`, { method: 'DELETE' }); loadKeys(); } catch (e) { toast(e.message, true); } }
+function copyKey(k) { navigator.clipboard.writeText(k); toast('已复制'); }
+
+// ---- logs ----
+async function loadLogs() {
+  try {
+    const list = await api('/admin/logs?limit=200');
+    document.getElementById('logBody').innerHTML = list.map(l => `
+      <tr>
+        <td class="muted">${esc(l.created_at)}</td>
+        <td class="mono">${esc(l.api_key_name||'-')}</td>
+        <td class="mono">${esc(l.model||'-')}</td>
+        <td>${esc(l.upstream_name||'-')}</td>
+        <td><span class="pill ${l.status==='success'?'ok':'err'}">${l.status}</span></td>
+        <td>${l.latency_ms!=null?l.latency_ms+'ms':'-'}</td>
+        <td>${(l.prompt_tokens||0)+(l.completion_tokens||0)||(l.prompt_tokens||l.completion_tokens?'-':'-')}</td>
+        <td class="muted" style="max-width:240px;overflow:hidden;text-overflow:ellipsis" title="${esc(l.error||'')}">${esc(l.error||'')}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="8" class="muted">暂无日志</td></tr>';
+  } catch (e) { toast(e.message, true); }
+}
+
+function esc(s) { return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// init
+if (TOKEN) { showApp(); loadDash(); loadUpstreams(); } else { showLogin(); }
+</script>
+</body>
+</html>
