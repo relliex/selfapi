@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
-const { stmtUp, stmtKey, stmtLog, logRequest } = require('./db');
+const { stmtUp, stmtKey, stmtLog, stmtSet, settingGet, settingSet, logRequest } = require('./db');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -22,6 +22,25 @@ function reqBaseUrl(req) {
 
 // ponytail: round-robin counter in memory, resets on restart. Fine for self-use.
 const rrCounters = {};
+const stickyUp = {}; // failover mode: model -> last-successful upstream index
+
+// pick the starting upstream index based on rotation mode
+function pickStart(model, n) {
+  const mode = settingGet('rotation_mode', 'failover');
+  if (mode === 'round_robin') {
+    const idx = (rrCounters[model] || 0) % n;
+    rrCounters[model] = (idx + 1) % n;
+    return idx;
+  }
+  // failover: stick to the last known-good upstream for this model
+  return (stickyUp[model] || 0) % n;
+}
+// on success in failover mode, remember which upstream worked
+function markSuccess(model, idx) {
+  if (settingGet('rotation_mode', 'failover') === 'failover') {
+    stickyUp[model] = idx;
+  }
+}
 
 // ---- admin auth ----
 function adminAuth(req, res, next) {
@@ -197,6 +216,19 @@ app.get('/admin/stats', adminAuth, (req, res) => {
   res.json(stmtLog.stats.get() || {});
 });
 
+// rotation mode: 'failover' (stick to one upstream, switch on error) | 'round_robin' (rotate every request)
+app.get('/admin/settings', adminAuth, (req, res) => {
+  res.json({ rotation_mode: settingGet('rotation_mode', 'failover') });
+});
+app.put('/admin/settings', adminAuth, (req, res) => {
+  const mode = req.body && req.body.rotation_mode;
+  if (mode !== 'failover' && mode !== 'round_robin') {
+    return res.status(400).json({ error: { message: "rotation_mode must be 'failover' or 'round_robin'" } });
+  }
+  settingSet('rotation_mode', mode);
+  res.json({ ok: true, rotation_mode: mode });
+});
+
 app.get('/admin/info', adminAuth, (req, res) => {
   const base = reqBaseUrl(req);
   res.json({
@@ -245,9 +277,8 @@ app.post('/v1/chat/completions', downstreamAuth, async (req, res) => {
     return res.status(404).json({ error: { message: `model '${model}' not available. GET /v1/models for the list.` } });
   }
 
-  // round-robin starting index
-  const startIdx = (rrCounters[model] || 0) % upstreams.length;
-  rrCounters[model] = (rrCounters[model] + 1) % upstreams.length;
+  // starting upstream index depends on rotation mode (failover vs round_robin)
+  const startIdx = pickStart(model, upstreams.length);
 
   const inputBody = summarizeInput(body);
   const failures = [];
@@ -298,6 +329,7 @@ app.post('/v1/chat/completions', downstreamAuth, async (req, res) => {
           sseBuf += decoder.decode();
           res.end();
           const { content, usage } = parseSSE(sseBuf);
+          markSuccess(model, idx);
           logRequest({
             apiKeyId: req.apiKey.id, apiKeyName: req.apiKey.name,
             model, upstream: up, status: 'success',
@@ -322,6 +354,7 @@ app.post('/v1/chat/completions', downstreamAuth, async (req, res) => {
       // non-stream: parse and forward
       const data = await upstreamRes.json();
       res.json(data);
+      markSuccess(model, idx);
       logRequest({
         apiKeyId: req.apiKey.id, apiKeyName: req.apiKey.name,
         model, upstream: up, status: 'success',
@@ -360,11 +393,11 @@ app.post('/v1/embeddings', downstreamAuth, async (req, res) => {
   const upstreams = stmtUp.upstreamsForModel.all(model);
   if (!upstreams.length) return res.status(404).json({ error: { message: `model '${model}' not available` } });
 
-  const startIdx = (rrCounters[model] || 0) % upstreams.length;
-  rrCounters[model] = (rrCounters[model] + 1) % upstreams.length;
+  const startIdx = pickStart(model, upstreams.length);
 
   for (let i = 0; i < upstreams.length; i++) {
-    const up = upstreams[(startIdx + i) % upstreams.length];
+    const idx = (startIdx + i) % upstreams.length;
+    const up = upstreams[idx];
     const t0 = Date.now();
     try {
       const r = await fetch(`${normalizeBase(up)}/embeddings`, {
@@ -379,6 +412,7 @@ app.post('/v1/embeddings', downstreamAuth, async (req, res) => {
       }
       const data = await r.json();
       res.json(data);
+      markSuccess(model, idx);
       logRequest({ apiKeyId: req.apiKey.id, apiKeyName: req.apiKey.name, model, upstream: up, status: 'success', latencyMs: Date.now() - t0, promptTokens: data.usage?.prompt_tokens ?? null });
       return;
     } catch (e) {

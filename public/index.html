@@ -111,6 +111,14 @@
         <pre id="usageBox"></pre>
       </div>
       <div class="card">
+        <h2>调用策略</h2>
+        <p class="muted" style="font-size:12px;margin:0 0 10px">同名模型在多个上游间的分配方式。两种模式下单平台报错都会立即切换下一个，下游无感知。</p>
+        <div class="row">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="rmode" value="failover" onchange="setRotationMode('failover')"> <span><strong>单平台优先</strong> · 命中同一上游保缓存命中，失败才切换</span></label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-left:18px"><input type="radio" name="rmode" value="round_robin" onchange="setRotationMode('round_robin')"> <span><strong>平台轮换</strong> · 每个请求轮到下一个上游，追求并发上限</span></label>
+        </div>
+      </div>
+      <div class="card">
         <h2>请求统计 <button class="btn ghost sm" style="float:right" onclick="clearStats()">清空统计</button></h2>
         <div id="statsBox" class="stat-grid"></div>
       </div>
@@ -230,7 +238,9 @@ function tab(name) {
 // ---- dash ----
 async function loadDash() {
   try {
-    const [info, stats] = await Promise.all([api('/admin/info'), api('/admin/stats')]);
+    const [info, stats, settings] = await Promise.all([api('/admin/info'), api('/admin/stats'), api('/admin/settings')]);
+    const mode = settings.rotation_mode || 'failover';
+    document.querySelectorAll('input[name=rmode]').forEach(r => { r.checked = (r.value === mode); });
     const base = info.openai_endpoint || (location.origin + '/v1');
     document.getElementById('usageBox').textContent =
 `# OpenAI 兼容 endpoint
@@ -375,6 +385,13 @@ async function clearLogs() {
     toast('日志已清空');
     loadLogs();
     loadDash();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function setRotationMode(mode) {
+  try {
+    await api('/admin/settings', { method: 'PUT', body: JSON.stringify({ rotation_mode: mode }) });
+    toast(mode === 'round_robin' ? '已切换为平台轮换' : '已切换为单平台优先');
   } catch (e) { toast(e.message, true); }
 }
 

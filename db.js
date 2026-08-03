@@ -57,6 +57,11 @@ CREATE TABLE IF NOT EXISTS logs (
 
 CREATE INDEX IF NOT EXISTS idx_logs_created ON logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_logs_model ON logs(model);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
 `);
 
 // ponytail: lightweight migration for pre-existing DBs (ALTER ADD COLUMN is idempotent via try/catch)
@@ -117,6 +122,20 @@ const stmtLog = {
   `),
 };
 
+const stmtSet = {
+  get: db.prepare('SELECT value FROM settings WHERE key=?'),
+  set: db.prepare('INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'),
+  all: db.prepare('SELECT * FROM settings'),
+};
+
+function settingGet(key, def) {
+  const row = stmtSet.get.get(key);
+  return row ? row.value : def;
+}
+function settingSet(key, value) {
+  stmtSet.set.run(key, value);
+}
+
 function logRequest({ apiKeyId, apiKeyName, model, upstream, status, latencyMs, promptTokens, completionTokens, totalTokens, inputBody, outputBody, error }) {
   const pt = promptTokens ?? null;
   const ct = completionTokens ?? null;
@@ -129,4 +148,4 @@ function logRequest({ apiKeyId, apiKeyName, model, upstream, status, latencyMs, 
   );
 }
 
-module.exports = { db, stmtUp, stmtKey, stmtLog, logRequest };
+module.exports = { db, stmtUp, stmtKey, stmtLog, stmtSet, settingGet, settingSet, logRequest };
