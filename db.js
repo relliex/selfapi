@@ -104,6 +104,7 @@ const stmtLog = {
     (api_key_id, api_key_name, model, upstream_id, upstream_name, status, latency_ms, prompt_tokens, completion_tokens, total_tokens, input_body, output_body, error)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`),
   recent: db.prepare('SELECT * FROM logs ORDER BY id DESC LIMIT ?'),
+  clear: db.prepare('DELETE FROM logs'),
   stats: db.prepare(`
     SELECT
       COUNT(*) AS total,

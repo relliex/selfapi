@@ -188,6 +188,11 @@ app.get('/admin/logs', adminAuth, (req, res) => {
   res.json(stmtLog.recent.all(limit));
 });
 
+app.delete('/admin/logs', adminAuth, (req, res) => {
+  stmtLog.clear.run();
+  res.json({ ok: true });
+});
+
 app.get('/admin/stats', adminAuth, (req, res) => {
   res.json(stmtLog.stats.get() || {});
 });

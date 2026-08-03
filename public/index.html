@@ -66,7 +66,7 @@
   .model-list span { background: var(--panel2); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; font-size: 11px; font-family: ui-monospace, monospace; }
   .login-wrap { max-width: 360px; margin: 80px auto; }
   details summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
-  pre { background: var(--panel2); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+  pre { background: var(--panel2); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 320px; overflow-y: auto; }
   .hidden { display: none !important; }
   code { background: var(--panel2); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
   a { color: var(--accent); }
@@ -111,7 +111,7 @@
         <pre id="usageBox"></pre>
       </div>
       <div class="card">
-        <h2>请求统计</h2>
+        <h2>请求统计 <button class="btn ghost sm" style="float:right" onclick="clearStats()">清空统计</button></h2>
         <div id="statsBox" class="stat-grid"></div>
       </div>
     </section>
@@ -170,7 +170,7 @@
     <!-- 日志 -->
     <section id="t-logs" class="hidden">
       <div class="card">
-        <h2>请求日志 <button class="btn ghost sm" style="float:right" onclick="loadLogs()">刷新</button></h2>
+        <h2>请求日志 <span style="float:right;display:flex;gap:6px"><button class="btn ghost sm" onclick="loadLogs()">刷新</button><button class="btn ghost sm" onclick="clearLogs()">清空日志</button></span></h2>
         <table>
           <thead><tr><th>时间</th><th>密钥</th><th>模型</th><th>上游</th><th>状态</th><th>耗时</th><th>输入</th><th>输出</th><th>总</th><th>错误</th></tr></thead>
           <tbody id="logBody"></tbody>
@@ -356,6 +356,25 @@ async function loadLogs() {
         </div>
       </details></td></tr>
     `).join('') || '<tr><td colspan="10" class="muted">暂无日志</td></tr>';
+  } catch (e) { toast(e.message, true); }
+}
+
+async function clearStats() {
+  if (!confirm('确定清空统计？将删除所有日志记录，统计与日志一并归零。')) return;
+  try {
+    await api('/admin/logs', { method: 'DELETE' });
+    toast('统计已清空');
+    loadDash();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function clearLogs() {
+  if (!confirm('确定清空所有日志？此操作不可恢复。')) return;
+  try {
+    await api('/admin/logs', { method: 'DELETE' });
+    toast('日志已清空');
+    loadLogs();
+    loadDash();
   } catch (e) { toast(e.message, true); }
 }
 
