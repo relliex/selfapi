@@ -12,7 +12,13 @@ const PORT = process.env.PORT || 3000;
 // Default admin password (override on Railway via ADMIN_PASSWORD env var)
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Sk7$mP2!nQ9xR4vL';
 const ADMIN_TOKEN = process.env.ADMIN_PASSWORD || 'Sk7$mP2!nQ9xR4vL';
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || ''; // optional, for display
+
+// ponytail: infer public base URL from request headers (handles Railway's random domain)
+function reqBaseUrl(req) {
+  const proto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
+  const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`;
+  return `${proto}://${host}`;
+}
 
 // ponytail: round-robin counter in memory, resets on restart. Fine for self-use.
 const rrCounters = {};
@@ -164,10 +170,11 @@ app.get('/admin/stats', adminAuth, (req, res) => {
 });
 
 app.get('/admin/info', adminAuth, (req, res) => {
+  const base = reqBaseUrl(req);
   res.json({
-    public_base_url: PUBLIC_BASE_URL || `http://localhost:${PORT}`,
-    downstream_base: PUBLIC_BASE_URL || `http://localhost:${PORT}`,
-    openai_endpoint: (PUBLIC_BASE_URL || `http://localhost:${PORT}`) + '/v1',
+    public_base_url: base,
+    downstream_base: base,
+    openai_endpoint: base + '/v1',
   });
 });
 
