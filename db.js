@@ -48,6 +48,9 @@ CREATE TABLE IF NOT EXISTS logs (
   latency_ms INTEGER,
   prompt_tokens INTEGER,
   completion_tokens INTEGER,
+  total_tokens INTEGER,
+  input_body TEXT,
+  output_body TEXT,
   error TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
@@ -55,6 +58,11 @@ CREATE TABLE IF NOT EXISTS logs (
 CREATE INDEX IF NOT EXISTS idx_logs_created ON logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_logs_model ON logs(model);
 `);
+
+// ponytail: lightweight migration for pre-existing DBs (ALTER ADD COLUMN is idempotent via try/catch)
+for (const [col, def] of [['total_tokens','INTEGER'],['input_body','TEXT'],['output_body','TEXT']]) {
+  try { db.exec(`ALTER TABLE logs ADD COLUMN ${col} ${def}`); } catch (_) {}
+}
 
 // upstreams
 const stmtUp = {
@@ -93,8 +101,8 @@ const stmtKey = {
 
 const stmtLog = {
   insert: db.prepare(`INSERT INTO logs
-    (api_key_id, api_key_name, model, upstream_id, upstream_name, status, latency_ms, prompt_tokens, completion_tokens, error)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`),
+    (api_key_id, api_key_name, model, upstream_id, upstream_name, status, latency_ms, prompt_tokens, completion_tokens, total_tokens, input_body, output_body, error)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`),
   recent: db.prepare('SELECT * FROM logs ORDER BY id DESC LIMIT ?'),
   stats: db.prepare(`
     SELECT
@@ -102,16 +110,21 @@ const stmtLog = {
       SUM(CASE WHEN status='success' THEN 1 ELSE 0 END) AS success,
       SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) AS errors,
       SUM(prompt_tokens) AS prompt_tokens,
-      SUM(completion_tokens) AS completion_tokens
+      SUM(completion_tokens) AS completion_tokens,
+      SUM(total_tokens) AS total_tokens
     FROM logs
   `),
 };
 
-function logRequest({ apiKeyId, apiKeyName, model, upstream, status, latencyMs, promptTokens, completionTokens, error }) {
+function logRequest({ apiKeyId, apiKeyName, model, upstream, status, latencyMs, promptTokens, completionTokens, totalTokens, inputBody, outputBody, error }) {
+  const pt = promptTokens ?? null;
+  const ct = completionTokens ?? null;
+  const tt = totalTokens ?? (pt != null && ct != null ? pt + ct : null);
   stmtLog.insert.run(
     apiKeyId || null, apiKeyName || null, model || null,
     upstream ? upstream.id : null, upstream ? upstream.name : null,
-    status, latencyMs ?? null, promptTokens ?? null, completionTokens ?? null, error || null
+    status, latencyMs ?? null, pt, ct, tt,
+    inputBody ?? null, outputBody ?? null, error || null
   );
 }
 

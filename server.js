@@ -43,6 +43,29 @@ function normalizeBase(u) {
   return b + '/v1';
 }
 
+// ponytail: cap stored bodies so the log table doesn't balloon on long conversations
+const MAX_BODY = 50000;
+function truncate(s) { return s == null ? null : (s.length > MAX_BODY ? s.slice(0, MAX_BODY) + '…[truncated]' : s); }
+function summarizeInput(body) { try { return truncate(JSON.stringify(body)); } catch { return null; } }
+// parse accumulated SSE buffer -> { content, usage }
+function parseSSE(buf) {
+  let content = '';
+  let usage = null;
+  for (const line of buf.split('\n')) {
+    const t = line.trim();
+    if (!t.startsWith('data:')) continue;
+    const payload = t.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+    try {
+      const j = JSON.parse(payload);
+      const delta = j.choices?.[0]?.delta?.content;
+      if (delta) content += delta;
+      if (j.usage) usage = j.usage;
+    } catch (_) {}
+  }
+  return { content, usage };
+}
+
 async function fetchUpstreamModels(upstream) {
   const base = normalizeBase(upstream);
   const r = await fetch(`${base}/models`, {
@@ -221,6 +244,7 @@ app.post('/v1/chat/completions', downstreamAuth, async (req, res) => {
   const startIdx = (rrCounters[model] || 0) % upstreams.length;
   rrCounters[model] = (rrCounters[model] + 1) % upstreams.length;
 
+  const inputBody = summarizeInput(body);
   const failures = [];
   for (let i = 0; i < upstreams.length; i++) {
     const idx = (startIdx + i) % upstreams.length;
@@ -245,7 +269,7 @@ app.post('/v1/chat/completions', downstreamAuth, async (req, res) => {
         logRequest({
           apiKeyId: req.apiKey.id, apiKeyName: req.apiKey.name,
           model, upstream: up, status: 'error',
-          latencyMs: Date.now() - t0, error: errMsg,
+          latencyMs: Date.now() - t0, error: errMsg, inputBody,
         });
         continue; // try next upstream, downstream sees nothing yet
       }
@@ -257,19 +281,25 @@ app.post('/v1/chat/completions', downstreamAuth, async (req, res) => {
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
         const reader = upstreamRes.body.getReader();
-        let firstChunk = true;
+        const decoder = new TextDecoder();
+        let sseBuf = '';
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            if (firstChunk) { firstChunk = false; }
             res.write(value);
+            sseBuf += decoder.decode(value, { stream: true });
           }
+          sseBuf += decoder.decode();
           res.end();
+          const { content, usage } = parseSSE(sseBuf);
           logRequest({
             apiKeyId: req.apiKey.id, apiKeyName: req.apiKey.name,
             model, upstream: up, status: 'success',
             latencyMs: Date.now() - t0,
+            promptTokens: usage?.prompt_tokens ?? null,
+            completionTokens: usage?.completion_tokens ?? null,
+            inputBody, outputBody: truncate(content) || null,
           });
         } catch (streamErr) {
           // stream broke mid-flight; cannot retry transparently. End cleanly if possible.
@@ -277,6 +307,7 @@ app.post('/v1/chat/completions', downstreamAuth, async (req, res) => {
             apiKeyId: req.apiKey.id, apiKeyName: req.apiKey.name,
             model, upstream: up, status: 'error',
             latencyMs: Date.now() - t0, error: 'stream broken: ' + streamErr.message,
+            inputBody,
           });
           try { res.end(); } catch (_) {}
         }
@@ -292,6 +323,7 @@ app.post('/v1/chat/completions', downstreamAuth, async (req, res) => {
         latencyMs: Date.now() - t0,
         promptTokens: data.usage?.prompt_tokens ?? null,
         completionTokens: data.usage?.completion_tokens ?? null,
+        inputBody, outputBody: truncate(JSON.stringify(data)),
       });
       return;
     } catch (e) {
@@ -299,7 +331,7 @@ app.post('/v1/chat/completions', downstreamAuth, async (req, res) => {
       logRequest({
         apiKeyId: req.apiKey.id, apiKeyName: req.apiKey.name,
         model, upstream: up, status: 'error',
-        latencyMs: Date.now() - t0, error: e.message,
+        latencyMs: Date.now() - t0, error: e.message, inputBody,
       });
       continue;
     }

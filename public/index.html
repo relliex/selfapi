@@ -172,7 +172,7 @@
       <div class="card">
         <h2>请求日志 <button class="btn ghost sm" style="float:right" onclick="loadLogs()">刷新</button></h2>
         <table>
-          <thead><tr><th>时间</th><th>密钥</th><th>模型</th><th>上游</th><th>状态</th><th>耗时</th><th>Tokens</th><th>错误</th></tr></thead>
+          <thead><tr><th>时间</th><th>密钥</th><th>模型</th><th>上游</th><th>状态</th><th>耗时</th><th>输入</th><th>输出</th><th>总</th><th>错误</th></tr></thead>
           <tbody id="logBody"></tbody>
         </table>
       </div>
@@ -252,8 +252,9 @@ curl ${base}/chat/completions \\
       ['总请求', s.total || 0],
       ['成功', s.success || 0],
       ['失败', s.errors || 0],
-      ['Prompt tokens', s.prompt_tokens || 0],
-      ['Completion tokens', s.completion_tokens || 0],
+      ['输入 tokens', s.prompt_tokens || 0],
+      ['输出 tokens', s.completion_tokens || 0],
+      ['总 tokens', s.total_tokens || 0],
     ].map(([l,v]) => `<div class="stat"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
   } catch (e) { toast(e.message, true); }
 }
@@ -343,10 +344,18 @@ async function loadLogs() {
         <td>${esc(l.upstream_name||'-')}</td>
         <td><span class="pill ${l.status==='success'?'ok':'err'}">${l.status}</span></td>
         <td>${l.latency_ms!=null?l.latency_ms+'ms':'-'}</td>
-        <td>${(l.prompt_tokens||0)+(l.completion_tokens||0)||(l.prompt_tokens||l.completion_tokens?'-':'-')}</td>
+        <td>${l.prompt_tokens!=null?l.prompt_tokens:'-'}</td>
+        <td>${l.completion_tokens!=null?l.completion_tokens:'-'}</td>
+        <td>${l.total_tokens!=null?l.total_tokens:'-'}</td>
         <td class="muted" style="max-width:240px;overflow:hidden;text-overflow:ellipsis" title="${esc(l.error||'')}">${esc(l.error||'')}</td>
       </tr>
-    `).join('') || '<tr><td colspan="8" class="muted">暂无日志</td></tr>';
+      <tr><td colspan="10"><details><summary class="muted">查看输入/输出</summary>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
+          <div><div class="muted" style="font-size:11px;margin-bottom:4px">输入</div><pre>${esc(l.input_body||'(无)')}</pre></div>
+          <div><div class="muted" style="font-size:11px;margin-bottom:4px">输出</div><pre>${esc(l.output_body||'(无)')}</pre></div>
+        </div>
+      </details></td></tr>
+    `).join('') || '<tr><td colspan="10" class="muted">暂无日志</td></tr>';
   } catch (e) { toast(e.message, true); }
 }
 
