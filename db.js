@@ -2,8 +2,11 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
-// ponytail: auto-detect Railway volume mount at /data; fall back to local ./data
-const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, 'data');
+// ponytail: auto-detect persistent storage. Railway injects RAILWAY_VOLUME_MOUNT_PATH
+// when a volume is attached; otherwise probe /data; else fall back to local ./data
+const DATA_DIR =
+  process.env.RAILWAY_VOLUME_MOUNT_PATH ||
+  (fs.existsSync('/data') ? '/data' : path.join(__dirname, 'data'));
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'selfapi.db');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
